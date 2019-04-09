@@ -2,11 +2,11 @@ package accumulator
 
 import (
 	"fmt"
-	"bytes"
 	"math/big"
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/rc4"
+	"crypto/cipher"
 )
 
 const RSA_2048_STR = "2519590847565789349402718324004839857142928212620403202777713783604366202070" +
@@ -24,27 +24,30 @@ type RsaAccumulator struct {
 	value big.Int
 }
 
-func (a *RsaAccumulator) initialize() {
-	modulus = new(big.Int)
+type streamCipherReader struct {
+	S cipher.Stream
 }
 
+func (r streamCipherReader) Read(dst []byte) (n int, err error) {
+	n = len(dst)
+	err = nil
+	r.S.XORKeyStream(dst[:n], dst[:n])
+	return
+}
 
+func (a *RsaAccumulator) initialize() {
+	fmt.Sscan(RSA_2048_STR, a.modulus)
+}
 
-
-var rsa_2048 = new(big.Int)
-fmt.Sscan(RSA_2048_STR, rsa_2048)
-
-
-func hashToPrime(m []byte, bits int) *big.Int {
-	b := make([]byte, ((bits + 7) / 8)*80)
+func hashToPrime(m []byte, bits int) (p *big.Int) {
 	sum := sha256.Sum256(m)
-	c, err := rc4.NewCipher(sum[:])
-	c.XORKeyStream(b, b)
-	p, err := rand.Prime(bytes.NewReader(b), bits)
+	s, err := rc4.NewCipher(sum[:])
+	reader := &streamCipherReader{s}
+	p, err = rand.Prime(reader, bits)
 	if err != nil {
 		return nil
 	}
-	return p
+	return
 }
 
 
